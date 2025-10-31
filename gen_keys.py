@@ -1,60 +1,61 @@
-from web3 import Web3
-import eth_account
+from eth_account import Account
 from eth_account.messages import encode_defunct
+import eth_account
+import os
 
 
-def sign(m):
-    w3 = Web3()
-
-    # TODO create an account for signing the message
-    account_object = 0  # Create an Eth account
-    public_key = 0  # Eth account public key
-    private_key = 0  # Eth account private key
-
-    # TODO sign the given message "m"
-    message = m  # Encode the message
-    signed_message = 0  # Sign the message
-
-
-    """You can save the account public/private keypair that prints in the next section
-     for use in future assignments. You will need a funded account to pay gas fees for 
-     several upcoming assignments and the first step of funding an account is having 
-     an account to send the funds too.
+def get_keys(filename: str = "secret_key.txt"):
     """
-    print('Account created:\n'
-          f'private key={w3.to_hex(private_key)}\naccount={public_key}\n')
-    assert isinstance(signed_message, eth_account.datastructures.SignedMessage)
-    # print(f"signed message {signed_message}\nr= {signed_message.r}\ns= {signed_message.s}")
+ 
+    """
+    if os.path.exists(filename) and os.path.getsize(filename) > 0:
+        with open(filename, "r") as f:
+            sk = f.readline().strip()
+        if not sk.startswith("0x"):
+            sk = "0x" + sk
+        return sk, Account.from_key(sk).address
 
-    return public_key, signed_message
+    acct = Account.create()
+    sk = acct.key.hex()
+    addr = acct.address
+    with open(filename, "w") as f:
+        f.write(sk + "\n")
+    return sk, addr
 
 
-def verify(m, public_key, signed_message):
-    w3 = Web3()
+def sign_message(challenge, filename="secret_key.txt"):
+    """
 
-    # TODO verify the 'signed_message' is valid given the original message 'm' and the signers 'public_key'
-    message = m  # Encode the message
-    signer = 0  # Verify the message
-    valid_signature = 0  # True if message verifies, False if message does not verify
+    """
+    with open(filename, "r") as f:
+        lines = f.readlines()
+    assert len(lines) > 0, "Your account secret_key.txt is empty"
 
-    assert isinstance(valid_signature, bool), "verify should return a boolean value"
-    return valid_signature
+    sk = lines[0].strip()
+    if not sk.startswith("0x"):
+        sk = "0x" + sk
+
+    account = eth_account.Account.from_key(sk)
+    eth_addr = account.address
+
+    message = encode_defunct(challenge)
+    signed_message = eth_account.Account.sign_message(message, private_key=sk)
+
+    recovered = eth_account.Account.recover_message(
+        message, signature=signed_message.signature.hex()
+    )
+    assert recovered == eth_addr, "Failed to sign message properly"
+
+    return signed_message, eth_addr
 
 
 if __name__ == "__main__":
-    import random
-    import string
 
-    for i in range(10):
-        m = "".join([random.choice(string.ascii_letters) for _ in range(20)])
+    pk, addr = get_keys()
+    print("Private key saved to secret_key.txt")
+    print("Address:", addr)
 
-        pub_key, signature = sign(m)
 
-        # Modifies every other message so that the signature fails to verify
-        if i % 2 == 0:
-            m = m + 'a'
-
-        if verify(m, pub_key, signature):
-            print("Signed Message Verified")
-        else:
-            print("Signed Message Failed to Verify")
+    sig, who = sign_message(b"bridge-project-challenge")
+    print("Signed by:", who)
+    print("Signature:", sig.signature.hex())
